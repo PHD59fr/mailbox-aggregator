@@ -1,0 +1,65 @@
+# Local configuration and runtime data
+.env
+.env.*
+!.env.example
+/data/
+opaque_server_setup
+/certs/
+
+# Local coding-agent configuration
+.agents/
+.codex/
+AGENTS.md
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.gemini/
+GEMINI.md
+.copilot/
+.github/copilot-instructions.md
+.github/instructions/
+.github/agents/
+.github/prompts/
+
+# Go executables and local build backups
+/bin/
+/server
+/server.exe
+/mail-aggregator
+/mail-aggregator.exe
+/mailbox-aggregator
+/mailbox-aggregator.exe
+/opaque-setup
+/opaque-setup.exe
+*.test
+/.build-backups/
+/internal/webui/.dist-before-*/
+
+# Frontend dependencies and generated files
+node_modules/
+/web/dist/
+/web/src/wasm/opaque.wasm
+/web/public/opaque.wasm
+/web/vite.config.js
+/web/vite.config.d.ts
+*.tsbuildinfo
+
+# Keep internal/webui/dist available for the Go embed directive and Go-only CI.
+
+# Test reports, coverage and profiling output
+coverage/
+coverage*.out
+*.prof
+*.pprof
+playwright-report/
+test-results/
+
+# Local logs, editors and operating-system files
+*.log
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

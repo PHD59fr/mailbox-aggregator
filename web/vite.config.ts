@@ -1,0 +1,4 @@
+import { defineConfig } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
+
+export default defineConfig({ build: { rollupOptions: { output: { onlyExplicitManualChunks: true, manualChunks(id) { if (id.includes('node_modules/@serenity-kit/opaque/')) return 'opaque'; if (id.includes('node_modules/@tiptap/') || id.includes('node_modules/prosemirror-')) return 'editor'; if (id.includes('node_modules/@noble/')) return 'kdf'; if (id.includes('node_modules/@vue/') || id.includes('node_modules/vue/') || id.includes('node_modules/pinia/') || id.includes('node_modules/vue-router/')) return 'framework' } } } }, plugins: [vue()], server: { proxy: { '/api': 'http://localhost:8080', '/healthz': 'http://localhost:8080', '/readyz': 'http://localhost:8080' } }, test: { maxWorkers: 3, environment: 'jsdom', setupFiles: ['./src/test/setup.ts'] } })

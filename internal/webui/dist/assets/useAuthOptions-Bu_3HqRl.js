@@ -1,0 +1,1 @@
+import{a as e}from"./index-Dqi13iiU.js";import{r as o}from"./auth-I2gt-i-r.js";import{o as s,r}from"./framework-BU5pkEcA.js";function f(){const a=r(!1),t=r(!1);return s(async()=>{if(!o())try{a.value=(await e("/auth/options")).registration_enabled===!0}catch{a.value=!1}finally{t.value=!0}}),{registrationEnabled:a,optionsLoaded:t}}export{f as u};

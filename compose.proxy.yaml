@@ -1,0 +1,49 @@
+# Optional TLS gateways. Internal ports are unprivileged; clients use 993/465.
+# docker compose -f compose.yaml -f compose.proxy.yaml up -d --build
+x-mail-proxy-image: &mail-proxy-image
+  image: ${MAIL_PROXY_IMAGE:-mailbox-aggregator:proxy-local}
+  build:
+    context: .
+    args:
+      APP_UID: ${APP_UID:-1000}
+      APP_GID: ${APP_GID:-1000}
+services:
+  proxy-certificates:
+    <<: *mail-proxy-image
+    restart: "no"
+    entrypoint: ["/app/mail-aggregator", "--ensure-mail-proxy-certificate"]
+    environment:
+      MAIL_PROXY_HOSTNAME: ${MAIL_PROXY_HOSTNAME:-}
+      IMAP_PROXY_HOSTNAME: ${IMAP_PROXY_HOSTNAME:-}
+      SMTP_PROXY_HOSTNAME: ${SMTP_PROXY_HOSTNAME:-}
+      IMAP_PROXY_ENABLED: ${IMAP_PROXY_ENABLED:-true}
+      SMTP_PROXY_ENABLED: ${SMTP_PROXY_ENABLED:-true}
+      MAIL_PROXY_TLS_CERT: /app/mail-proxy-certs/fullchain.pem
+      MAIL_PROXY_TLS_KEY: /app/mail-proxy-certs/privkey.pem
+    volumes:
+      - "${MAIL_PROXY_CERTS_DIR:-mail-proxy-certs}:/app/mail-proxy-certs"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+  mail-aggregator:
+    <<: *mail-proxy-image
+    depends_on:
+      proxy-certificates:
+        condition: service_completed_successfully
+    ports:
+      - "993:1993"
+      - "465:1465"
+    volumes:
+      - "${MAIL_PROXY_CERTS_DIR:-mail-proxy-certs}:/app/mail-proxy-certs:ro"
+    environment:
+      IMAP_PROXY_ENABLED: ${IMAP_PROXY_ENABLED:-true}
+      SMTP_PROXY_ENABLED: ${SMTP_PROXY_ENABLED:-true}
+      IMAP_PROXY_LISTEN_ADDR: ":1993"
+      SMTP_PROXY_LISTEN_ADDR: ":1465"
+      MAIL_PROXY_HOSTNAME: ${MAIL_PROXY_HOSTNAME:-}
+      IMAP_PROXY_HOSTNAME: ${IMAP_PROXY_HOSTNAME:-}
+      SMTP_PROXY_HOSTNAME: ${SMTP_PROXY_HOSTNAME:-}
+      MAIL_PROXY_TLS_CERT: /app/mail-proxy-certs/fullchain.pem
+      MAIL_PROXY_TLS_KEY: /app/mail-proxy-certs/privkey.pem
+volumes:
+  mail-proxy-certs:

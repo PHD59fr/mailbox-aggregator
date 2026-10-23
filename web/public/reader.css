@@ -1,0 +1,9 @@
+:root { color-scheme: light; font-family: system-ui, sans-serif; font-size: 15px; line-height: 1.65; color: #202a3b; background: #fff; overflow-wrap: anywhere; }
+body { margin: 0; padding: 24px; }
+a { color: #3454cf; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+blockquote { margin-left: 0; padding-left: 16px; border-left: 3px solid #d4daec; color: #566378; }
+table { border-collapse: collapse; max-width: 100%; }
+td, th { padding: 5px; overflow-wrap: anywhere; }
+img, video, audio, iframe, object, embed, form { display: none; }
+@media (max-width: 500px) { body { padding: 16px; } }

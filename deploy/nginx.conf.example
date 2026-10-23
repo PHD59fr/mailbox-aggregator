@@ -1,0 +1,21 @@
+# Include in an existing HTTPS server block. Restrict the upstream listener to
+# this proxy. Supply your certificate/key and trusted source CIDRs separately.
+# This example disables disk spooling for requests and responses on every route.
+location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header Connection "";
+    proxy_request_buffering off;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_max_temp_file_size 0;
+    client_max_body_size 32m;
+    client_body_timeout 35s;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 35s;
+    proxy_read_timeout 330s;
+    access_log off;
+}

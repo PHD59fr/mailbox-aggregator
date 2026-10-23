@@ -1,0 +1,126 @@
+--- /dev/null
++++ b/internal/api/reaudit_test.go
+@@ -0,0 +1,12 @@
++package api
++import("testing";"context";"fmt";"github.com/example/mail-aggregator/internal/imap";"github.com/google/uuid")
++func TestReauditWatchReservesInteractiveSlots(t *testing.T){r:=newWatchRegistry(20); user:=uuid.New(); _,ok:=r.start("watch",user,16,func(){});if !ok{t.Fatal("16 watchers rejected")}; _,ok=r.start("read",user,1,func(){});if !ok{t.Fatal("interactive read rejected while 4 supposedly reserved slots remain")}}
++func TestReauditWatchAllAllowedAccounts(t *testing.T){r:=newWatchRegistry(20);_,ok:=r.start("watch",uuid.New(),20,func(){});if !ok{t.Fatal("default 20 allowed accounts cannot be watched")}}
++
++func TestReauditSingleAccountActivationPreservesOtherAccounts(t *testing.T){
++ f:=newAPIFixtureWithReader(t,nil,fakeReader{list:func(context.Context,imap.Configuration,uint32,uint32)(imap.MessagePage,error){return imap.MessagePage{},nil}})
++ _,token,view:=f.addUser(t,"concurrent@example.test")
++ for _,id:=range []string{"A","B"}{body:=[]byte(fmt.Sprintf(`{"lock_revision":0,"lifetime_seconds":300,"accounts":{"%s":{"host":"8.8.8.8","port":993,"security":"tls","username":"synthetic","password":"synthetic"}}}`,id));r:=perform(f,"POST","/api/v1/session/credentials",token,view.CSRFToken,body);if r.Code!=200{t.Fatalf("activation %s: %d %s",id,r.Code,r.Body.String())}}
++ r:=perform(f,"GET","/api/v1/mailboxes/A/messages",token,"",nil);if r.Code!=200{t.Fatalf("A activation lost after B: %d %s",r.Code,r.Body.String())}
++}
++func TestReauditImportWithoutIfMatch(t *testing.T){f:=newAPIFixture(t);_,token,view:=f.addUser(t,"import@example.test");r:=perform(f,"PUT","/api/v1/vault/files/accounts",token,view.CSRFToken,testEnvelope(t));if r.Code!=204{t.Fatalf("current import request rejected: %d %s",r.Code,r.Body.String())}}
+--- /dev/null
++++ b/internal/smtp/reaudit_test.go
+@@ -0,0 +1,9 @@
++package smtp
++import("strings";"testing";"time";"fmt";"bytes";"github.com/example/mail-aggregator/internal/mail")
++func TestReauditHeadersRespect998Bytes(t *testing.T){
++ for _,subject:=range []string{strings.Repeat("a",998),strings.Repeat("é",300)}{t.Run(fmt.Sprint(len(subject)),func(t *testing.T){
++ m,err:=BuildMessage(mail.Identity{Email:"sender@example.test"},mail.Draft{To:[]mail.Address{{Email:"to@example.test"}},Subject:subject,Text:"hello"},time.Now());if err!=nil{t.Fatal(err)}
++ headers:=bytes.SplitN(m.Data,[]byte("\r\n\r\n"),2)[0]
++ for _,line:=range bytes.Split(headers,[]byte("\r\n")){if len(line)>998{t.Errorf("header length=%d, prefix=%q",len(line),line[:25])}}
++ })}
++}
+--- /dev/null
++++ b/internal/audit/reaudit_test.go
+@@ -0,0 +1,4 @@
++package audit
++import("testing";"os";"path/filepath";"strings";"net/http";"net/http/httptest")
++func TestReauditScannerDetectsBinaryAndLongLine(t *testing.T){for _,prefix:=range []string{"\x00",strings.Repeat("a",70000)}{t.Run("prefix",func(t *testing.T){dir:=t.TempDir();os.WriteFile(filepath.Join(dir,"leak.dat"),[]byte(prefix+"RE_AUDIT_SECRET"),0600);s:=NewScanner();s.RootDirs=[]string{dir};s.TempDirs=nil;s.LogDirs=nil;r,e:=s.Scan([]string{"RE_AUDIT_SECRET"});if e!=nil{t.Fatal(e)};if len(r)==0{t.Fatal("persisted marker missed and no scan error returned")}})}}
++func TestReauditHelpersRejectUnauthorized(t *testing.T){calls:=0;s:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){calls++;w.WriteHeader(401)}));defer s.Close();activateCredentials(t,s.URL,"invalid","invalid");readMessageWithRetry(t,s.URL,"invalid","invalid",1);sendMessageWithRetry(t,s.URL,"invalid","subject","body",1);forwardMessageWithRetry(t,s.URL,"invalid",1);t.Logf("All %d requests returned 401; current MA001 helpers still report success",calls)}
+--- a/web/src/stores/readerPreferences.test.ts
++++ b/web/src/stores/readerPreferences.test.ts
+@@ -25,3 +25,15 @@
+     expect(preferences.allowed('team@example.test')).toBe(false)
+   })
+ })
++
++it('reaudit: stale tab must preserve a remote image permission revocation', async () => {
++ const store=useReaderPreferences()
++ const old={id:'mail-reader',block_external:true,addresses:['revoked@example.test'],domains:[]}
++ const fresh={...old,addresses:[]}
++ vi.mocked(readCollection).mockResolvedValueOnce({revision:'old',records:{'mail-reader':old},save:vi.fn(),assertUnlocked:vi.fn()})
++ await store.load()
++ const records={'mail-reader':fresh}
++ vi.mocked(readCollection).mockResolvedValueOnce({revision:'fresh',records,save:vi.fn(),assertUnlocked:vi.fn()})
++ await store.trust('new@example.test',false)
++ expect(records['mail-reader'].addresses).toEqual(['new@example.test'])
++})
+--- a/web/src/crypto/composeDraft.test.ts
++++ b/web/src/crypto/composeDraft.test.ts
+@@ -156,3 +156,9 @@
+     expect(hasDraftContent({ version: 1, action: null, original: null, to: 'to@example.test', cc: '', bcc: '', subject: '', text: '', html: '', showCc: false, showBcc: false, selectedSentID: '', savedAt: 0 })).toBe(true)
+   })
+ })
++
++it('reaudit: attachment filenames must remain encrypted in browser storage',async()=>{
++ const session=create(new Uint8Array(32).fill(3),'user',()=>true,()=>draft())
++ await session.addAttachment(new File(['private payload'],'Confidentiel-licenciement-Alice.pdf',{type:'application/pdf'}))
++ expect(JSON.stringify([...draftStore.records.values()])).not.toContain('Confidentiel-licenciement-Alice.pdf')
++})
+--- /dev/null
++++ b/web/src/composables/useImportExport.reaudit.test.ts
+@@ -0,0 +1,21 @@
++import {beforeEach,it,expect,vi} from 'vitest'
++import {createPinia,setActivePinia} from 'pinia'
++import {useSessionStore} from '../stores/session'
++import {encryptExportBundle,exportUserData,importUserData,type ExportBundle} from './useImportExport'
++vi.mock('@noble/hashes/argon2.js',()=>({argon2id:()=>new Uint8Array(32).fill(9)}))
++beforeEach(()=>{setActivePinia(createPinia());const s=useSessionStore();s.authenticated=true;s.userID='user';s.vmk=new Uint8Array(32).fill(1)})
++const bundle=():ExportBundle=>({version:1,exported_at:new Date().toISOString(),accounts:{},smtp:{},preferences:{}})
++it('reaudit: imports must supply the revision required by the real API',async()=>{
++ const fetcher=vi.fn(async(_path:unknown,init?:RequestInit)=>new Headers(init?.headers).has('If-Match') ? new Response(null,{status:204}) : new Response(JSON.stringify({error:{code:'REVISION_REQUIRED',message:'If-Match is required.'}}),{status:428}))
++ vi.stubGlobal('fetch',fetcher)
++ const data=await encryptExportBundle(bundle(),'password123')
++ await expect(importUserData(data,'password123')).resolves.toBeUndefined()
++})
++it('reaudit: export must fail when a vault file cannot be fetched',async()=>{
++ vi.stubGlobal('fetch',vi.fn().mockRejectedValue(new TypeError('Network failure')))
++ await expect(exportUserData('password123')).rejects.toThrow()
++})
++it('reaudit: export must support valid vault collections beyond the JS argument limit',async()=>{
++ const b=bundle();b.preferences={note:'a'.repeat(200000)}
++ await expect(encryptExportBundle(b,'password123')).resolves.toEqual(expect.any(String))
++})
+--- a/web/src/api/mailboxes.test.ts
++++ b/web/src/api/mailboxes.test.ts
+@@ -79,3 +79,14 @@
+     expect(requests).not.toHaveBeenCalled()
+   })
+ })
++
++it('reaudit: partial activation errors must be reported for the failed account',async()=>{
++ vi.mocked(listAccounts).mockResolvedValue({receiver:account,bad:{...account,id:'bad',imap_host:'bad.invalid'}})
++ requests.mockImplementation(async(url)=>{
++  if(url==='/api/v1/session/credentials')return Response.json({account_errors:{bad:'Mail server could not be resolved.'}})
++  if(url==='/api/v1/mailboxes/watch')return new Response(new ReadableStream({start(c){c.close()}}),{headers:{'X-Watch-ID':'id'}})
++  throw new Error(String(url))
++ })
++ const receive=vi.fn();await watchMailboxes(30,new AbortController().signal,receive)
++ expect(receive).toHaveBeenCalledWith(expect.objectContaining({account_id:'bad',error:expect.any(String)}))
++})
+--- a/web/src/views/ComposeView.test.ts
++++ b/web/src/views/ComposeView.test.ts
+@@ -422,3 +422,18 @@
+     wrapper.unmount()
+   })
+ })
++
++it('reaudit: late SMTP success must preserve new edits in a restored composer',async()=>{
++ let resolve!:(result:SendResult)=>void
++ vi.mocked(sendMessage).mockImplementation(()=>new Promise(done=>{resolve=done}))
++ const first=await openComposer();await fillMessage(first)
++ await first.find('form').trigger('submit');await vi.waitFor(()=>expect(sendMessage).toHaveBeenCalled())
++ await router.push('/mail');first.unmount()
++ const second=await openComposer()
++ await vi.waitFor(()=>expect((second.get('#compose-subject').element as HTMLInputElement).value).toBe('Hello'))
++ await second.get('#compose-subject').setValue('New unsent edits')
++ resolve({status:'sent',message_id:'<late@example.test>'})
++ await flushPromises()
++ expect((second.get('#compose-subject').element as HTMLInputElement).value).toBe('New unsent edits')
++ second.unmount()
++})

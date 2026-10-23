@@ -1,0 +1,14 @@
+.git
+data
+opaque_server_setup
+bin
+web/node_modules
+web/dist
+coverage.out
+.env
+.env.*
+certs
+.build-backups
+internal/webui/.dist-before-*
+server
+mailbox-aggregator
