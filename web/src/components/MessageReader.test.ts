@@ -1,0 +1,111 @@
+import { mount, flushPromises } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import MessageReader from './MessageReader.vue'
+import type { Message } from '../api/reading'
+import {readCollection} from '../api/vaultCollection'
+import {useReaderPreferences} from '../stores/readerPreferences'
+vi.mock('../api/vaultCollection',()=>({readCollection:vi.fn()}))
+
+const message: Message = { uid: 42, uid_validity: 7, subject: '<script>not markup</script>', from: [{ name: 'Team', email: 'team@example.test' }], to: [{ email: 'me@example.test' }], cc: [], date: '2026-10-22T12:00:00Z', seen: false, size: 1200, text: 'Plain version', html: '<h1>Formatted version</h1>', attachments: [{ part: '2', filename: 'note.pdf', content_type: 'application/pdf', size: 120 }], truncated: false }
+beforeEach(() => {vi.resetAllMocks();setActivePinia(createPinia());vi.mocked(readCollection).mockResolvedValue({revision:null,records:{},save:vi.fn().mockResolvedValue(undefined),assertUnlocked:vi.fn()})})
+describe('isolated message reader', () => {
+  it('disables Delete and cancels an open confirmation when Trash becomes None',async()=>{
+    const wrapper=mount(MessageReader,{props:{message,loading:false,error:'',downloading:''}})
+    const remove=()=>wrapper.findAll('.message-actions button').find(button=>button.text()==='Delete')!
+    await remove().trigger('click');expect(wrapper.find('.trash-confirm').exists()).toBe(true)
+    await wrapper.setProps({trashDisabled:true})
+    expect(remove().attributes()).toHaveProperty('disabled')
+    expect(wrapper.text()).toContain('Trash is set to None')
+    expect(wrapper.find('.trash-confirm').exists()).toBe(false)
+    await remove().trigger('click');expect(wrapper.emitted('trash')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it('confirms soft deletion and offers no permanent-delete action in Trash',async()=>{
+    const wrapper=mount(MessageReader,{props:{message,loading:false,error:'',downloading:''}})
+    await wrapper.findAll('button').find(button=>button.text()==='Delete')!.trigger('click')
+    expect(wrapper.get('.trash-confirm').text()).toContain('not be permanently deleted')
+    expect(wrapper.emitted('trash')).toBeUndefined()
+    await wrapper.findAll('button').find(button=>button.text()==='Move to Trash')!.trigger('click')
+    expect(wrapper.emitted('trash')).toHaveLength(1)
+    await wrapper.setProps({inTrash:true});expect(wrapper.findAll('.message-actions button').some(button=>button.text()==='Delete')).toBe(false);wrapper.unmount()
+  })
+  it('trusts a specific sender directly from the message and can revoke that permission',async()=>{
+    const wrapper=mount(MessageReader,{props:{message,loading:false,error:'',downloading:'',reference:{accountID:'work',uid:42,validity:7}}});await flushPromises()
+    const button=()=>wrapper.find('.sender-trust')
+    expect(button().text()).toBe('Trust sender');expect(wrapper.find('.reader-privacy-panel').exists()).toBe(false)
+    await button().trigger('click');await flushPromises()
+    expect(button().text()).toBe('Trusted sender');expect(wrapper.get('iframe').attributes('src')).toContain('external=1')
+    expect(useReaderPreferences().data.addresses).toEqual(['team@example.test'])
+    await button().trigger('click');await flushPromises()
+    expect(button().text()).toBe('Trust sender');expect(wrapper.get('iframe').attributes('src')).not.toContain('external=1')
+    expect(useReaderPreferences().data.addresses).toEqual([]);wrapper.unmount()
+  })
+  it('trusts every sender at the chosen domain and keeps independent address permissions when revoking it',async()=>{
+    const wrapper=mount(MessageReader,{props:{message,loading:false,error:'',downloading:'',reference:{accountID:'work',uid:42,validity:7}}});await flushPromises()
+    expect(wrapper.get('.domain-trust').text()).toBe('Trust domain *@example.test')
+    await wrapper.get('.domain-trust').trigger('click');await flushPromises()
+    const preferences=useReaderPreferences()
+    expect(preferences.data.domains).toEqual(['example.test']);expect(preferences.data.addresses).toEqual([])
+    expect(wrapper.get('.domain-trust').attributes('aria-pressed')).toBe('true')
+    expect(preferences.allowed('other@example.test')).toBe(true);expect(preferences.allowed('other@sub.example.test')).toBe(false)
+    await wrapper.setProps({message:{...message,uid:43,from:[{email:'other@example.test'}]},reference:{accountID:'work',uid:43,validity:7}});await flushPromises()
+    expect(wrapper.get('.sender-trust').attributes('aria-pressed')).toBe('false')
+    expect(wrapper.get('.domain-trust').text()).toBe('Trusted domain *@example.test')
+    expect(wrapper.get('iframe').attributes('src')).toContain('external=1')
+    await wrapper.get('.sender-trust').trigger('click');await flushPromises()
+    await wrapper.get('.sender-trust').trigger('click');await flushPromises()
+    expect(wrapper.get('iframe').attributes('src')).toContain('external=1')
+    await wrapper.get('.sender-trust').trigger('click');await flushPromises()
+    await wrapper.get('.domain-trust').trigger('click');await flushPromises()
+    expect(preferences.data.domains).toEqual([]);expect(preferences.data.addresses).toEqual(['other@example.test'])
+    expect(wrapper.get('iframe').attributes('src')).toContain('external=1')
+    await wrapper.get('.sender-trust').trigger('click');await flushPromises()
+    expect(wrapper.get('iframe').attributes('src')).not.toContain('external=1');wrapper.unmount()
+  })
+  it.each(['.sender-trust','.domain-trust'])('does not load external content if permission from %s could not be saved',async selector=>{
+    vi.mocked(readCollection).mockResolvedValue({revision:null,records:{},save:vi.fn().mockRejectedValue(new Error('Conflict')),assertUnlocked:vi.fn()})
+    const wrapper=mount(MessageReader,{props:{message,loading:false,error:'',downloading:'',reference:{accountID:'work',uid:42,validity:7}}});await flushPromises()
+    await wrapper.get(selector).trigger('click');await flushPromises()
+    expect(wrapper.get('iframe').attributes('src')).not.toContain('external=1');expect(wrapper.find('[role="alert"]').text()).toContain('Conflict');wrapper.unmount()
+  })
+  it('uses the isolated document route and blocks external images until explicitly allowed', async () => {
+    const wrapper = mount(MessageReader,{props:{message,loading:false,error:'',downloading:'',reference:{accountID:'work',uid:42,validity:7}}})
+    expect(wrapper.get('iframe').attributes('src')).toBe('/api/v1/mailboxes/work/messages/42/document?uid_validity=7')
+    expect(wrapper.get('iframe').attributes('srcdoc')).toBeUndefined()
+    await wrapper.get('.privacy-toggle').trigger('click')
+    await wrapper.findAll('button').find(button=>button.text()==='Load images once')!.trigger('click')
+    expect(wrapper.get('iframe').attributes('src')).toContain('external=1')
+    await wrapper.findAll('button').find(button=>button.text()==='Block images')!.trigger('click')
+    expect(wrapper.get('iframe').attributes('src')).not.toContain('external=1');wrapper.unmount()
+  })
+  it('offers the inverse read flag action for either current state', async () => {
+    const wrapper = mount(MessageReader,{props:{message,loading:false,error:'',downloading:''}})
+    await wrapper.findAll('button').find(button=>button.text()==='Mark as read')!.trigger('click')
+    expect(wrapper.emitted('toggle-seen')).toHaveLength(1)
+    await wrapper.setProps({message:{...message,seen:true}});await flushPromises()
+    expect(wrapper.findAll('button').some(button=>button.text()==='Mark as unread')).toBe(true);wrapper.unmount()
+  })
+  it('isolates HTML without scripts, same-origin access or remote resources', () => {
+    const wrapper = mount(MessageReader, { props: { message, loading: false, error: '', downloading: '' } })
+    expect(wrapper.find('h2').text()).toBe(message.subject)
+    expect(wrapper.find('script').exists()).toBe(false)
+    const frame = wrapper.get('iframe')
+    expect(frame.attributes('sandbox')).not.toContain('allow-scripts')
+    expect(frame.attributes('sandbox')).not.toContain('allow-same-origin')
+    expect(frame.attributes('srcdoc')).toContain("default-src 'none'")
+    expect(frame.attributes('srcdoc')).toContain("img-src 'none'")
+    expect(frame.attributes('srcdoc')).toContain('<h1>Formatted version</h1>')
+  })
+  it('supports plain text, attachment download and mobile back navigation', async () => {
+    const wrapper = mount(MessageReader, { props: { message, loading: false, error: '', downloading: '' } })
+    const button = (text: string) => wrapper.findAll('button').find(button => button.text().includes(text))!
+    await button('Plain text').trigger('click')
+    expect(wrapper.find('iframe').exists()).toBe(false)
+    expect(wrapper.get('pre').text()).toBe('Plain version')
+    await button('note.pdf').trigger('click')
+    expect(wrapper.emitted('download')?.[0]).toEqual([message.attachments[0]])
+    await button('Back to messages').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+})

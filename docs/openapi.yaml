@@ -1,0 +1,934 @@
+openapi: 3.1.0
+info:
+  title: Mailbox Aggregator API
+  version: 0.1.0
+  description: RFC 9807 OPAQUE authentication, encrypted vault, SMTP submission, session-scoped IMAP reading and explicit provider actions.
+servers:
+  - url: /api/v1
+paths:
+  /auth/options:
+    get:
+      summary: Read the operator registration policy
+      responses:
+        '200':
+          description: No-store public options
+          content: { application/json: { schema: { type: object, required: [registration_enabled], properties: { registration_enabled: { type: boolean } } } } }
+  /auth/password/start:
+    post:
+      summary: Start a password change with a fresh one-use reauthentication grant
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [login, registration_request]
+              properties:
+                login: { type: string }
+                registration_request: { type: string }
+                rotate_vmk: { type: boolean, default: false }
+      responses:
+        '200': { description: One-use five-minute flow and OPAQUE registration response, content: { application/json: { schema: { type: object, required: [flow_id, registration_response], properties: { flow_id: { type: string }, registration_response: { type: string } } } } } }
+        '403': { description: REAUTHENTICATION_REQUIRED; perform explicit current-password OPAQUE reauthentication }
+  /auth/password/finish:
+    post:
+      summary: Commit authentication and encrypted vault generation atomically
+      description: Rewrap preserves the VMK and takes no collection replacements. Rotation increments key_version and supplies all five newly encrypted collections. All eight server snapshots must still match. Completion revokes sessions and pending logins and disables gateways. No automatic retry on a lost or uncertain result.
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [flow_id, registration_record, vault_metadata]
+              properties:
+                flow_id: { type: string }
+                registration_record: { type: string }
+                vault_metadata: { $ref: '#/components/schemas/VaultMetadata' }
+                files:
+                  type: object
+                  maxProperties: 5
+                  additionalProperties: { $ref: '#/components/schemas/EncryptedFile' }
+      responses:
+        '204': { description: Durable commit completed; sign in with the new password }
+        '400': { description: CREDENTIAL_CHANGE_FAILED or INVALID_INPUT; reconcile an uncertain result by signing in }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /auth/register/start:
+    post:
+      summary: Start RFC 9807 registration
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterStart' } } } }
+      responses:
+        '200': { description: OPAQUE registration challenge, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterStartResult' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+        '403': { description: REGISTRATION_DISABLED }
+  /auth/register/finish:
+    post:
+      summary: Finish RFC 9807 registration
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterFinish' } } } }
+      responses:
+        '200': { description: Account registered and authenticated, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { description: REGISTRATION_DISABLED }
+  /auth/login/start:
+    post:
+      summary: Start RFC 9807 login
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginStart' } } } }
+      responses:
+        '200': { description: OPAQUE login challenge, content: { application/json: { schema: { $ref: '#/components/schemas/LoginStartResult' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+  /auth/login/finish:
+    post:
+      summary: Finish RFC 9807 login
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginFinish' } } } }
+      responses:
+        '200': { description: Authenticated session, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '503': { $ref: '#/components/responses/AuthUnavailable' }
+  /me:
+    get:
+      summary: Get current user state
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          description: Current user
+          content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    delete:
+      summary: Permanently delete the authenticated account
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirmation]
+              properties: { confirmation: { type: string, const: DELETE } }
+      responses:
+        '204': { description: Local account deletion completed }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /session:
+    get:
+      summary: Get the current HTTP/vault session state
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          description: Session
+          content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /auth/reauth/start:
+    post:
+      summary: Start fresh RFC 9807 authentication for the current account
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginStart' } } } }
+      responses:
+        '200': { description: OPAQUE login challenge }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /auth/reauth/finish:
+    post:
+      summary: Finish fresh authentication for the current session
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginFinish' } } } }
+      responses:
+        '200': { description: Reauthentication succeeded }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /session/credentials:
+    post:
+      summary: Activate decrypted mail credentials in this session
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CredentialActivation' }
+      responses:
+        '200': { description: Credentials activated with possible per-account errors, content: { application/json: { schema: { $ref: '#/components/schemas/ActivationResult' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { description: LOCK_REVISION_CONFLICT; this tab must unlock again before activating credentials }
+        '503': { description: MAIL_SERVER_UNAVAILABLE; temporary DNS failure, safe to retry activation without submitting mail }
+    delete:
+      summary: Remove temporary credentials and lock the session
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      responses:
+        '204':
+          description: Locked
+          headers:
+            X-Lock-Revision:
+              description: Revision of this specific lock; configuration edits can retain the vault only if this is the next expected revision
+              schema: { type: integer, minimum: 0 }
+  /mailboxes/watch:
+    post:
+      summary: Stream INBOX counts using IMAP IDLE with polling fallback
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_interval_seconds: { type: integer, minimum: 10, maximum: 300, default: 30 }
+                accounts: { type: array, minItems: 1, uniqueItems: true, items: { type: string, maxLength: 128 }, description: Explicit active accounts to monitor; omitted means all active receiving accounts }
+      responses:
+        '200':
+          description: Newline-delimited ready, heartbeat and status events; counts only, never message bodies. Send presence every 15 seconds. Stream ends on lock, credential expiry or missing presence for 45 seconds.
+          headers:
+            X-Watch-ID: { description: Session-bound presence lease identifier, schema: { type: string, format: uuid } }
+          content:
+            application/x-ndjson:
+              schema: { type: string, description: 'One JSON event per line. Status includes account_id, messages, unseen, uid_next, uid_validity, checked_at, mode (idle or polling), and optional error.' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '423': { description: No active receiving credentials }
+        '429': { description: Limit of 20 upstream connections per user or 64 globally exceeded }
+  /mailboxes/presence:
+    post:
+      summary: Renew the browser-presence lease for a mailbox watch
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [watch_id]
+              properties: { watch_id: { type: string, maxLength: 64 } }
+      responses:
+        '204': { description: Presence renewed }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Watch absent or owned by another session }
+  /mailboxes/{account}/folders:
+    parameters: [{ $ref: '#/components/parameters/ReceivingAccount' }]
+    get:
+      summary: Synchronize IMAP folder names and counts
+      description: Opt-in browser preference sync_folders. Bounded LIST/STATUS, up to 200 folders with name, delimiter, role, special_use, selectable, messages, unseen, uid_next, uid_validity and optional safe error. Standard roles use SPECIAL-USE with conservative name fallbacks. No bodies, local cache or folder mutations. Browser refreshes at its configured fallback interval.
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          description: No-store folder snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [folders, truncated]
+                properties:
+                  folders: { type: array, maxItems: 200, items: { type: object } }
+                  truncated: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { description: IMAP_AUTH_FAILED; correct credentials before retrying }
+        '423': { description: Receiving identity locked, missing or expired }
+        '429': { description: Upstream connection limit reached }
+        '502': { description: Generic IMAP_READ_FAILED }
+    post:
+      summary: Explicitly create, rename, delete, subscribe or unsubscribe a provider folder
+      description: Uses this session's activated receiving account. Deletion requires confirmation equal to name and may permanently remove provider messages. INBOX cannot be renamed or deleted. No automatic retry after an uncertain result.
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, name]
+              properties:
+                action: { type: string, enum: [create, rename, delete, subscribe, unsubscribe] }
+                name: { type: string, minLength: 1, maxLength: 1024 }
+                new_name: { type: string, maxLength: 1024 }
+                confirmation: { type: string, maxLength: 1024 }
+      responses:
+        '204': { description: Provider confirmed the operation }
+        '400': { description: INVALID_INPUT, INVALID_MAILBOX_ACTION or CONFIRMATION_REQUIRED }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '423': { description: Receiving identity unavailable }
+        '502': { description: IMAP_ACTION_UNCONFIRMED; inspect provider state before retrying }
+  /mailboxes/{account}/messages:
+    parameters:
+      - $ref: '#/components/parameters/ReceivingAccount'
+      - $ref: '#/components/parameters/Folder'
+    get:
+      summary: List up to 50 folder summaries, newest UID first
+      description: Uses bounded FETCH windows, never SEARCH ALL or message bodies. Pagination uses the previous page's next_before and uid_validity. A removed anchor requires refresh.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - { name: before, in: query, schema: { type: integer, minimum: 1, maximum: 4294967295 } }
+        - { name: uid_validity, in: query, description: Required when before is supplied, schema: { type: integer, minimum: 1, maximum: 4294967295 } }
+        - { name: search, in: query, description: Provider-side text/header search; bounded sequence windows, schema: { type: string, maxLength: 512 } }
+        - { name: seen, in: query, schema: { type: string, enum: [read, unread] } }
+        - { name: from, in: query, description: Sender header contains this name/address, schema: { type: string, maxLength: 254 } }
+        - { name: to, in: query, description: To or Cc header contains this name/address, schema: { type: string, maxLength: 254 } }
+        - { name: subject, in: query, description: Subject header contains this text, schema: { type: string, maxLength: 512 } }
+        - { name: since, in: query, description: Received date on or after this day, schema: { type: string, format: date } }
+        - { name: until, in: query, description: Received date on or before this day, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: A bounded page; no-store
+          content: { application/json: { schema: { $ref: '#/components/schemas/MessagePage' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { description: MAILBOX_CHANGED; refresh the message list }
+        '422': { description: SEARCH_TOO_BROAD or IMAP_AUTH_FAILED; refine search or correct credentials before retrying }
+        '423': { description: Receiving identity locked, missing or expired }
+        '429': { description: Upstream connection limit reached }
+        '502': { description: Generic IMAP_READ_FAILED; provider details are not exposed }
+  /mailboxes/{account}/messages/{uid}:
+    parameters:
+      - $ref: '#/components/parameters/ReceivingAccount'
+      - $ref: '#/components/parameters/MessageUID'
+      - $ref: '#/components/parameters/UIDValidity'
+      - $ref: '#/components/parameters/Folder'
+    get:
+      summary: Open a folder message without changing its flags
+      description: Fetches selected MIME text alternatives with BODY.PEEK, up to 2 MiB decoded each. HTML is allowlist-sanitized and attachment metadata is returned without downloading files.
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          description: Message content; no-store
+          content: { application/json: { schema: { $ref: '#/components/schemas/ReceivedMessage' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { description: Message no longer exists }
+        '409': { description: UIDVALIDITY changed; refresh the message list }
+        '423': { description: Receiving identity locked, missing or expired }
+        '429': { description: Upstream connection limit reached }
+        '502': { description: Generic IMAP_READ_FAILED }
+  /mailboxes/{account}/messages/{uid}/attachments/{part}:
+    parameters:
+      - $ref: '#/components/parameters/ReceivingAccount'
+      - $ref: '#/components/parameters/MessageUID'
+      - $ref: '#/components/parameters/UIDValidity'
+      - $ref: '#/components/parameters/Folder'
+      - { name: part, in: path, required: true, schema: { type: string, pattern: '^[0-9]+(\.[0-9]+)*$', maxLength: 100 } }
+    get:
+      summary: Download one attachment on demand
+      description: Up to 10 MiB decoded, encoding-aware wire limits, original file bytes. No temporary files or server cache.
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          description: Attachment download; no-store and nosniff
+          headers:
+            Content-Disposition: { schema: { type: string }, description: Attachment-only with a sanitized filename }
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { description: Message or attachment no longer exists }
+        '409': { description: UIDVALIDITY changed; refresh the message list }
+        '413': { description: Attachment exceeds the safe size limit }
+        '423': { description: Receiving identity locked, missing or expired }
+        '429': { description: Upstream connection limit reached }
+        '502': { description: Generic IMAP_READ_FAILED }
+  /proxy:
+    get:
+      summary: Get server gateway availability and the current user's mail-client settings
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          description: Secret-free settings; send X-Resource-Revision in If-Match when saving or disabling. ETag is retained for compatibility. A missing record returns revision '*'.
+          headers: { ETag: { schema: { type: string } }, X-Resource-Revision: { schema: { type: string } } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/MailProxyStatus' } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    put:
+      summary: Configure dedicated password-encrypted mail-client credentials for the current user
+      description: Server opt-in is required. Choose an IMAP target and either one SMTP target or a list of sender targets. A dedicated password of at least 16 bytes is required when enabling access. Source encrypted-file revisions must match. Replacing access closes existing proxy connections. Web lock/logout do not disable this independent access.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CSRF' }
+        - { $ref: '#/components/parameters/ProxyRevision' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MailProxySettings' } } }
+      responses:
+        '204': { description: Saved; headers contain the new revision, headers: { ETag: { schema: { type: string } }, X-Resource-Revision: { schema: { type: string } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: Gateway disabled by operator or stale proxy/provider revision }
+        '428': { description: Missing proxy or source-file revision }
+    delete:
+      summary: Disable both mail gateways and disconnect this user's clients
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CSRF' }
+        - { $ref: '#/components/parameters/ProxyRevision' }
+      responses:
+        '204': { description: Disabled }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '428': { description: Missing proxy revision }
+  /connections/test:
+    post:
+      summary: Verify IMAP/SMTP TLS and credentials without sending mail
+      description: One attempt per source IP every 30 seconds, shared by both protocols. Successful and invalid attempts consume the window. No provider details or secrets are returned.
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [protocol, host, port, security, username, password]
+              properties:
+                protocol: { type: string, enum: [imap, smtp] }
+                host: { type: string }
+                port: { type: integer, minimum: 1, maximum: 65535 }
+                security: { type: string, enum: [tls, starttls] }
+                username: { type: string, minLength: 1, maxLength: 512 }
+                password: { type: string, format: password, minLength: 1, maxLength: 4096 }
+      responses:
+        '200': { description: TLS and provider authentication succeeded }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429':
+          description: IP test cooldown or upstream connection budget exceeded
+          headers: { Retry-After: { schema: { type: integer }, description: Remaining cooldown seconds } }
+        '502': { description: Generic connection or authentication failure }
+  /mailboxes/{account}/messages/{uid}/document:
+    parameters: [{ $ref: '#/components/parameters/ReceivingAccount' }, { $ref: '#/components/parameters/MessageUID' }, { $ref: '#/components/parameters/UIDValidity' }, { $ref: '#/components/parameters/Folder' }]
+    get:
+      summary: Render a sanitized email in its own styled sandboxed document
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - { name: external, in: query, description: Explicit browser consent for HTTP(S) images only, schema: { type: integer, enum: [0, 1], default: 0 } }
+      responses:
+        '200':
+          description: No-store HTML with independent restrictive CSP and opaque-origin sandbox. The main app CSP is not relaxed.
+          content: { text/html: { schema: { type: string } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { description: Message no longer exists }
+        '409': { description: UIDVALIDITY changed }
+        '423': { description: Receiving credentials unavailable or expired }
+  /mailboxes/{account}/messages/{uid}/source:
+    parameters: [{ $ref: '#/components/parameters/ReceivingAccount' }, { $ref: '#/components/parameters/MessageUID' }, { $ref: '#/components/parameters/UIDValidity' }, { $ref: '#/components/parameters/Folder' }]
+    get:
+      summary: Retrieve complete original RFC 822/MIME bytes and headers
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          description: No-store attachment-only original source, at most 20 MiB
+          content: { application/octet-stream: { schema: { type: string, format: binary } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { description: Message no longer exists }
+        '409': { description: UIDVALIDITY changed }
+        '413': { description: Original source exceeds 20 MiB }
+        '423': { description: Receiving credentials unavailable or expired }
+  /mailboxes/{account}/messages/{uid}/seen:
+    parameters: [{ $ref: '#/components/parameters/ReceivingAccount' }, { $ref: '#/components/parameters/MessageUID' }, { $ref: '#/components/parameters/UIDValidity' }, { $ref: '#/components/parameters/Folder' }]
+    post:
+      summary: Set the Seen flag for this exact message
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      responses:
+        '204': { description: Message marked as read }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Message no longer exists }
+        '409': { description: UIDVALIDITY changed }
+        '423': { description: Receiving credentials unavailable or expired }
+  /mailboxes/{account}/messages/{uid}/unseen:
+    parameters: [{ $ref: '#/components/parameters/ReceivingAccount' }, { $ref: '#/components/parameters/MessageUID' }, { $ref: '#/components/parameters/UIDValidity' }, { $ref: '#/components/parameters/Folder' }]
+    post:
+      summary: Clear the Seen flag for this exact message
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      responses:
+        '204': { description: Message marked as unread }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Message no longer exists }
+        '409': { description: UIDVALIDITY changed }
+        '423': { description: Receiving credentials unavailable or expired }
+  /mailboxes/{account}/messages/{uid}/trash:
+    parameters: [{ $ref: '#/components/parameters/ReceivingAccount' }, { $ref: '#/components/parameters/MessageUID' }, { $ref: '#/components/parameters/UIDValidity' }, { $ref: '#/components/parameters/Folder' }]
+    post:
+      summary: Move one message to the server Trash without permanent deletion
+      description: Uses MOVE or verified COPY followed by targeted STORE and UID EXPUNGE (requires UIDPLUS). Never unrestricted EXPUNGE. A manual Trash target must exist and be selectable on this same identity; never fall back if it is missing. Never retry an ambiguous outcome automatically.
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CSRF' }
+        - name: trash_folder
+          in: query
+          description: Exact manually mapped Trash path, maximum 1024 UTF-8 bytes, no CR/LF/NUL or INBOX; empty means automatic.
+          schema: { type: string, maxLength: 1024 }
+        - name: trash_exclude
+          in: query
+          description: Paths assigned to other manual roles, excluded from automatic Trash discovery. Maximum six paths, same path restrictions as trash_folder.
+          style: form
+          explode: true
+          schema: { type: array, maxItems: 6, items: { type: string, maxLength: 1024 } }
+      responses:
+        '204': { description: Message moved to existing server Trash }
+        '400': { description: Invalid Trash target or exclusions }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Message no longer exists }
+        '409': { description: UIDVALIDITY changed or message already in Trash }
+        '422': { description: Trash missing, safe MOVE unsupported, or IMAP authentication rejected }
+        '423': { description: Receiving credentials unavailable or expired }
+        '502': { description: IMAP_TRASH_UNCONFIRMED; refresh before considering a retry }
+  /mailboxes/{account}/messages/{uid}/redirect:
+    parameters: [{ $ref: '#/components/parameters/ReceivingAccount' }, { $ref: '#/components/parameters/MessageUID' }, { $ref: '#/components/parameters/UIDValidity' }, { $ref: '#/components/parameters/Folder' }]
+    post:
+      summary: Redirect the authorized original message with Resent headers
+      description: Original From/body are preserved, Bcc headers removed, SMTP envelope bound to the activated sending identity. No automatic retry on ambiguous submission.
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [smtp_config_id, to]
+              properties:
+                smtp_config_id: { type: string }
+                to: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/MessageAddress' } }
+                cc: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/MessageAddress' } }
+                bcc: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/MessageAddress' } }
+                sent_copy: { $ref: '#/components/schemas/SentCopyInput' }
+      responses:
+        '200':
+          description: SMTP accepted the redirected message; optional Sent copy failures remain a sent success
+          content: { application/json: { schema: { $ref: '#/components/schemas/SendResult' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { description: Original source exceeds safe size limit }
+        '423': { description: Receiving or sending credentials unavailable }
+        '502': { description: Provider rejection or SMTP_OUTCOME_UNKNOWN }
+  /messages/send:
+    post:
+      summary: Send text and optional sanitized HTML/attachments using an activated sending identity
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/OutgoingMessage' } } }
+      responses:
+        '200':
+          description: Message accepted by the SMTP server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { description: Message exceeds the request size limit }
+        '423': { description: Sending credentials are locked or expired }
+        '502': { description: SMTP_SEND_FAILED or SMTP_OUTCOME_UNKNOWN; never retry an ambiguous submission automatically }
+  /auth/logout:
+    post:
+      summary: Revoke current session
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      responses: { '204': { description: Logged out } }
+  /vault/import:
+    post:
+      summary: Replace three encrypted configuration collections as one revision guarded commit
+      description: Requires all current collection revisions. Journals contain encrypted envelopes only and finish on restart or before any later collection access. Success revokes every session of the current user and invalidates proxy snapshots. Never retry automatically after a missing or ambiguous response; sign in and reconcile first.
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: object
+                  additionalProperties: false
+                  required: [accounts, smtp, preferences]
+                  properties:
+                    accounts: { $ref: '#/components/schemas/ImportFile' }
+                    smtp: { $ref: '#/components/schemas/ImportFile' }
+                    preferences: { $ref: '#/components/schemas/ImportFile' }
+      responses:
+        '204': { description: All configuration collections committed; sign in again }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: REVISION_CONFLICT; none of the collections were changed by this attempt }
+        '413': { description: Request or encrypted collection exceeds its size limit }
+        '428': { description: REVISION_REQUIRED; each collection needs its current revision }
+        '500': { description: IMPORT_UNCONFIRMED; reconcile after reload, do not repeat automatically }
+  /vault/metadata:
+    get:
+      summary: Fetch public vault wrapping metadata
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          description: Versioned vault metadata
+          headers: { ETag: { schema: { type: string } }, X-Resource-Revision: { schema: { type: string } } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/VaultMetadata' } } }
+  /vault/files/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema: { type: string, enum: [config, accounts, identities, smtp, preferences] }
+    get:
+      summary: Fetch one encrypted vault file
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          description: Encrypted envelope
+          headers: { ETag: { schema: { type: string } }, X-Resource-Revision: { schema: { type: string } } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/EncryptedFile' } } }
+    put:
+      summary: Replace one encrypted vault file with optimistic concurrency
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - name: If-Match
+          in: header
+          required: true
+          description: Exact X-Resource-Revision from GET; use ETag only with older servers
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EncryptedFile' } } }
+      responses:
+        '204': { description: Updated, headers: { ETag: { schema: { type: string } }, X-Resource-Revision: { schema: { type: string } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /mailboxes/{account}/messages/{uid}/flag:
+    parameters: [{ $ref: '#/components/parameters/ReceivingAccount' }, { $ref: '#/components/parameters/MessageUID' }, { $ref: '#/components/parameters/UIDValidity' }, { $ref: '#/components/parameters/Folder' }]
+    post:
+      summary: Set or remove a supported persistent message flag
+      description: No automatic retry after an unconfirmed provider response. Transfers remain on the provider; safe moves require MOVE or confirmed COPY plus UIDPLUS and targeted UID EXPUNGE. Flagged/Answered require PERMANENTFLAGS support.
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [flag, enabled]
+              properties:
+                flag: { type: string, enum: [seen, flagged, answered] }
+                enabled: { type: boolean }
+      responses:
+        '204': { description: Provider confirmed the operation }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: UIDVALIDITY changed; refresh }
+        '422': { description: FLAG_UNSUPPORTED or MOVE_UNSUPPORTED }
+        '423': { description: Receiving identity unavailable }
+        '502': { description: IMAP_ACTION_UNCONFIRMED; refresh and inspect destination before retrying }
+  /mailboxes/{account}/messages/{uid}/transfer:
+    parameters: [{ $ref: '#/components/parameters/ReceivingAccount' }, { $ref: '#/components/parameters/MessageUID' }, { $ref: '#/components/parameters/UIDValidity' }, { $ref: '#/components/parameters/Folder' }]
+    post:
+      summary: Copy or safely move a message to another folder of the same provider account
+      description: No automatic retry after an unconfirmed provider response. Transfers remain on the provider; safe moves require MOVE or confirmed COPY plus UIDPLUS and targeted UID EXPUNGE. Flagged/Answered require PERMANENTFLAGS support.
+      security: [{ cookieAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/CSRF' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destination]
+              properties:
+                destination: { type: string, minLength: 1, maxLength: 1024 }
+                move: { type: boolean, default: false }
+      responses:
+        '204': { description: Provider confirmed the operation }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: UIDVALIDITY changed; refresh }
+        '422': { description: FLAG_UNSUPPORTED or MOVE_UNSUPPORTED }
+        '423': { description: Receiving identity unavailable }
+        '502': { description: IMAP_ACTION_UNCONFIRMED; refresh and inspect destination before retrying }
+components:
+  securitySchemes:
+    cookieAuth: { type: apiKey, in: cookie, name: mail_session }
+  parameters:
+    ProxyRevision: { name: If-Match, in: header, required: true, schema: { type: string }, description: X-Resource-Revision from GET /proxy (ETag on older servers); '*' only creates a previously absent record }
+    CSRF: { name: X-CSRF-Token, in: header, required: true, schema: { type: string, minLength: 32 } }
+    ReceivingAccount: { name: account, in: path, required: true, description: Receiving identity ID activated in this session, schema: { type: string } }
+    MessageUID: { name: uid, in: path, required: true, schema: { type: integer, minimum: 1, maximum: 4294967295 } }
+    UIDValidity: { name: uid_validity, in: query, required: true, schema: { type: integer, minimum: 1, maximum: 4294967295 } }
+    Folder: { name: folder, in: query, description: URL-encoded IMAP folder name; UID and UIDVALIDITY are scoped to this folder, schema: { type: string, default: INBOX, maxLength: 1024 } }
+  responses:
+    AuthUnavailable: { description: No reviewed RFC 9807 provider is configured, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unauthenticated: { description: Session missing or expired, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: Request forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Lifecycle or revision conflict, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    BadRequest: { description: Invalid input, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    MailProxyStatus:
+      type: object
+      properties:
+        imap_available: { type: boolean }
+        smtp_available: { type: boolean }
+        hostname: { type: string }
+        imap_port: { type: integer, const: 993 }
+        smtp_port: { type: integer, const: 465 }
+        imap_account_id: { type: string }
+        smtp_config_id: { type: string, description: Empty when disabled; '*' denotes the user's enabled sender collection }
+        needs_update: { type: boolean }
+    MailProxyTarget:
+      type: object
+      required: [id, host, port, security, username, password]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 128 }
+        host: { type: string }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        security: { type: string, enum: [tls, starttls] }
+        username: { type: string, minLength: 1, maxLength: 512 }
+        password: { type: string, format: password, minLength: 1, maxLength: 4096, writeOnly: true }
+        sender_email: { type: string, format: email, description: Required for each SMTP sender; must be unique in this user's enabled sender map }
+    MailProxySettings:
+      type: object
+      properties:
+        password: { type: string, format: password, minLength: 16, maxLength: 1024, writeOnly: true }
+        imap: { $ref: '#/components/schemas/MailProxyTarget' }
+        smtp: { $ref: '#/components/schemas/MailProxyTarget' }
+        senders: { type: array, maxItems: 20, items: { $ref: '#/components/schemas/MailProxyTarget' } }
+        accounts_revision: { type: string, description: Current accounts.enc X-Resource-Revision (ETag on older servers), required with imap }
+        smtp_revision: { type: string, description: Current smtp.enc X-Resource-Revision (ETag on older servers), required with smtp or senders }
+    RegisterStart:
+      type: object
+      additionalProperties: false
+      required: [login, registration_request]
+      properties: { login: { type: string, minLength: 3, maxLength: 254 }, registration_request: { type: string } }
+    RegisterStartResult:
+      type: object
+      required: [flow_id, registration_response, user_id]
+      properties: { flow_id: { type: string }, registration_response: { type: string }, user_id: { type: string, format: uuid } }
+    RegisterFinish:
+      type: object
+      required: [flow_id, registration_record, vault_metadata, files]
+      properties:
+        flow_id: { type: string }
+        registration_record: { type: string }
+        vault_metadata: { $ref: '#/components/schemas/VaultMetadata' }
+        files:
+          type: object
+          required: [config, accounts, identities, smtp, preferences]
+          properties:
+            config: { $ref: '#/components/schemas/EncryptedFile' }
+            accounts: { $ref: '#/components/schemas/EncryptedFile' }
+            identities: { $ref: '#/components/schemas/EncryptedFile' }
+            smtp: { $ref: '#/components/schemas/EncryptedFile' }
+            preferences: { $ref: '#/components/schemas/EncryptedFile' }
+    LoginStart:
+      type: object
+      additionalProperties: false
+      required: [login, start_login_request]
+      properties: { login: { type: string, minLength: 3, maxLength: 254 }, start_login_request: { type: string } }
+    LoginStartResult:
+      type: object
+      required: [flow_id, login_response]
+      properties: { flow_id: { type: string }, login_response: { type: string } }
+    LoginFinish:
+      type: object
+      additionalProperties: false
+      required: [flow_id, finish_login_request]
+      properties: { flow_id: { type: string }, finish_login_request: { type: string } }
+    Error:
+      type: object
+      required: [error]
+      properties: { error: { type: object, required: [code, message], properties: { code: { type: string }, message: { type: string } } } }
+    Me:
+      type: object
+      required: [user_id, state]
+      properties: { user_id: { type: string, format: uuid }, state: { type: string } }
+    Session:
+      type: object
+      required: [user_id, state, created_at, last_seen_at, expires_at, csrf_token, lock_revision, idle_timeout_seconds, max_accounts]
+      properties:
+        user_id: { type: string, format: uuid }
+        state: { type: string, enum: [AUTHENTICATED_LOCKED, AUTHENTICATED_UNLOCKED] }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        reauthenticated_at: { type: string, format: date-time }
+        csrf_token: { type: string }
+        idle_timeout_seconds: { type: integer, minimum: 1, description: Server idle timeout and maximum provider activation lifetime }
+        max_accounts: { type: integer, minimum: 1, maximum: 100, default: 20, description: Maximum identities per receiving or sending collection and active credential group }
+        lock_revision: { type: integer, minimum: 0, description: Incremented by explicit lock, not by provider credential lease expiry; invalidates old browser tab resumptions }
+    Credential:
+      type: object
+      additionalProperties: false
+      required: [host, port, security, username]
+      properties:
+        host: { type: string }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        security: { type: string, enum: [tls, starttls] }
+        username: { type: string }
+        sender_name: { type: string, maxLength: 128 }
+        sender_email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, format: password }
+        oauth_token: { type: string, format: password }
+    ActivationResult:
+      allOf:
+        - { $ref: '#/components/schemas/Session' }
+        - type: object
+          properties:
+            account_errors: { type: object, additionalProperties: { type: string } }
+            smtp_errors: { type: object, additionalProperties: { type: string } }
+    ImportFile:
+      type: object
+      required: [data, revision]
+      properties:
+        data: { $ref: '#/components/schemas/EncryptedFile' }
+        revision: { type: string, description: Current X-Resource-Revision from the corresponding GET }
+    CredentialActivation:
+      type: object
+      required: [lock_revision]
+      description: Default replace mode replaces supplied groups and preserves an omitted group. Merge mode refreshes only supplied identities and checks the resulting group sizes atomically. DELETE explicitly revokes all groups and advances lock_revision. A partial success returns per-account errors; all-failed groups are rejected.
+      properties:
+        mode: { type: string, enum: [merge, replace], default: replace }
+        lock_revision: { type: integer, minimum: 0, description: Revision known by the unlocked tab; checked atomically before provider credentials are installed }
+        lifetime_seconds: { type: integer, minimum: 1, description: Must not exceed the session idle_timeout_seconds }
+        accounts: { type: object, additionalProperties: { $ref: '#/components/schemas/Credential' } }
+        smtp: { type: object, additionalProperties: { $ref: '#/components/schemas/Credential' } }
+    MessageAddress:
+      type: object
+      required: [email]
+      properties: { email: { type: string, format: email }, name: { type: string } }
+    MessageSummary:
+      type: object
+      required: [uid, subject, from, to, cc, date, seen, size]
+      properties:
+        uid: { type: integer, minimum: 1, maximum: 4294967295 }
+        subject: { type: string }
+        from: { type: array, items: { $ref: '#/components/schemas/MessageAddress' } }
+        to: { type: array, items: { $ref: '#/components/schemas/MessageAddress' } }
+        cc: { type: array, items: { $ref: '#/components/schemas/MessageAddress' } }
+        date: { type: string, format: date-time }
+        seen: { type: boolean }
+        flagged: { type: boolean }
+        answered: { type: boolean }
+        size: { type: integer }
+    MessagePage:
+      type: object
+      required: [messages, uid_validity, next_before, total]
+      properties:
+        messages: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/MessageSummary' } }
+        uid_validity: { type: integer }
+        next_before: { type: integer, description: 'UID anchor for the next page, zero at the end' }
+        total: { type: integer }
+    ReceivedMessage:
+      allOf:
+        - $ref: '#/components/schemas/MessageSummary'
+        - type: object
+          required: [uid_validity, text, html, truncated, attachments]
+          properties:
+            uid_validity: { type: integer }
+            text: { type: string }
+            html: { type: string, description: Sanitized passive HTML; remote image URLs require explicit consent at the document endpoint }
+            css: { type: string, description: Sanitized bounded passive stylesheet rules }
+            reply_to: { type: array, items: { $ref: '#/components/schemas/MessageAddress' } }
+            message_id: { type: string }
+            truncated: { type: boolean, description: One or more oversized text alternatives were not loaded }
+            attachments:
+              type: array
+              items:
+                type: object
+                required: [part, filename, content_type, size]
+                properties:
+                  part: { type: string }
+                  filename: { type: string }
+                  content_type: { type: string }
+                  size: { type: integer, description: 'MIME wire size in bytes, before transfer decoding' }
+    OutgoingMessage:
+      type: object
+      required: [smtp_config_id, to]
+      description: From is selected from the activated SMTP identity, never from the message request. At most 100 recipients across To, Cc and Bcc.
+      properties:
+        smtp_config_id: { type: string, maxLength: 128 }
+        sent_copy: { $ref: '#/components/schemas/SentCopyInput' }
+        to: { type: array, minItems: 1, maxItems: 100, items: { $ref: '#/components/schemas/MessageAddress' } }
+        cc: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/MessageAddress' } }
+        bcc: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/MessageAddress' } }
+        subject: { type: string, maxLength: 998 }
+        text: { type: string, maxLength: 1048576 }
+        html: { type: string, maxLength: 2097152 }
+        in_reply_to: { type: string, maxLength: 1000 }
+        references: { type: array, maxItems: 32, items: { type: string, maxLength: 1000 } }
+        attachments:
+          type: array
+          maxItems: 20
+          description: At most 10 MiB total decoded data, processed only in memory.
+          items:
+            type: object
+            required: [filename, data]
+            properties:
+              filename: { type: string, maxLength: 255 }
+              content_type: { type: string, maxLength: 127 }
+              data: { type: string, contentEncoding: base64 }
+    SentCopyInput:
+      type: object
+      required: [account_id]
+      description: Optional copy to this session's activated IMAP identity after SMTP acceptance. No folder creation, no automatic APPEND retry. Missing copy credentials never turn an accepted SMTP message into a failed send.
+      properties:
+        account_id: { type: string, minLength: 1, maxLength: 128 }
+        folder: { type: string, maxLength: 1024, description: Exact existing folder or empty for automatic Sent detection. INBOX and control characters are rejected. }
+        exclude: { type: array, maxItems: 6, items: { type: string, minLength: 1, maxLength: 1024 }, description: Folders mapped to other roles, excluded from automatic Sent detection. }
+    SendResult:
+      type: object
+      required: [status, message_id]
+      properties:
+        status: { type: string, const: sent }
+        message_id: { type: string }
+        sent_copy:
+          type: object
+          required: [status]
+          properties:
+            status: { type: string, enum: [saved, failed] }
+            account_id: { type: string }
+            message: { type: string, description: Archive warning after SMTP acceptance. Never resend to repair an unconfirmed copy. }
+    VaultMetadata:
+      type: object
+      required: [version, kdf, kdf_salt, kdf_parameters, wrap_algorithm, wrapped_vmk, wrap_nonce, key_version]
+      properties:
+        version: { type: integer, const: 1 }
+        kdf: { type: string, const: argon2id }
+        kdf_salt: { type: string }
+        kdf_parameters: { type: object }
+        wrap_algorithm: { type: string, const: AES-256-GCM }
+        wrapped_vmk: { type: string }
+        wrap_nonce: { type: string }
+        key_version: { type: integer, minimum: 1 }
+    EncryptedFile:
+      type: object
+      additionalProperties: false
+      required: [version, algorithm, key_version, nonce, ciphertext]
+      properties:
+        version: { type: integer, const: 1 }
+        algorithm: { type: string, const: AES-256-GCM }
+        key_version: { type: integer, minimum: 1 }
+        nonce: { type: string }
+        ciphertext: { type: string }

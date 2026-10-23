@@ -1,0 +1,6 @@
+const encoder = new TextEncoder()
+export const utf8 = (value: string): Uint8Array => encoder.encode(value)
+export function base64(value: Uint8Array): string { let binary = ''; for (const byte of value) binary += String.fromCharCode(byte); return btoa(binary).replace(/=+$/, '') }
+export function fromBase64(value: string): Uint8Array { const binary = atob(value + '='.repeat((4 - value.length % 4) % 4)); return Uint8Array.from(binary, char => char.charCodeAt(0)) }
+export function concat(...values: Uint8Array[]): Uint8Array { const length = values.reduce((sum, item) => sum + item.length, 0); const out = new Uint8Array(length); let offset = 0; for (const value of values) { out.set(value, offset); offset += value.length } return out }
+export function aad(userID: string, fileID: string, version: number, keyVersion: number): Uint8Array { const fields = [utf8('mail-aggregator/aad'), utf8(userID), utf8(fileID)]; const size = fields.reduce((sum, field) => sum + 4 + field.length, 8); const out = new Uint8Array(size); const view = new DataView(out.buffer); let offset = 0; for (const field of fields) { view.setUint32(offset, field.length); offset += 4; out.set(field, offset); offset += field.length } view.setUint32(offset, version); view.setUint32(offset + 4, keyVersion); return out }

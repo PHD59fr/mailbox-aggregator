@@ -1,0 +1,20 @@
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px; font: 15px/1.65 Arial, sans-serif; color: #202a35; background: #fff; overflow-wrap: anywhere; }
+p { margin: 0 0 1em; }
+h1,h2,h3,h4,h5,h6 { line-height: 1.25; margin: 1em 0 .6em; }
+h1:first-child,h2:first-child,h3:first-child,p:first-child { margin-top: 0; }
+h1 { font-size: 28px; } h2 { font-size: 24px; } h3 { font-size: 20px; }
+a { color: #3b82f6; text-decoration: underline; }
+blockquote { margin: 1em 0; padding-left: 16px; border-left: 3px solid #cbd5e1; color: #596776; }
+ul,ol { padding-left: 24px; } li p { margin-bottom: .35em; }
+pre { white-space: pre-wrap; padding: 14px; background: #f1f4f7; border-radius: 6px; }
+code { font: .9em/1.6 ui-monospace, monospace; }
+table { border-collapse: collapse; max-width: 100%; width: 100%; margin: 1em 0; }
+td,th { border: 1px solid #d6dde5; padding: 8px 10px; text-align: left; } th { background: #f1f4f7; }
+td p,th p { margin: 0; } hr { border: 0; border-top: 1px solid #d6dde5; margin: 1.5em 0; }
+.email-placeholder { color: #7b8794; }
+.email-color-0 { color: #3b82f6; }.email-color-1 { color: #a855f7; }.email-color-2 { color: #e11d48; }.email-color-3 { color: #d97706; }.email-color-4 { color: #10b981; }.email-color-5 { color: #64748b; }
+.email-highlight-0 { background-color: #bfdbfe; }.email-highlight-1 { background-color: #e9d5ff; }.email-highlight-2 { background-color: #fecdd3; }.email-highlight-3 { background-color: #fef08a; }.email-highlight-4 { background-color: #bbf7d0; }.email-highlight-5 { background-color: #e2e8f0; }
+.email-size-12 { font-size:12px; }.email-size-14 { font-size:14px; }.email-size-16 { font-size:16px; }.email-size-18 { font-size:18px; }.email-size-20 { font-size:20px; }.email-size-24 { font-size:24px; }
+.email-align-left { text-align:left; }.email-align-center { text-align:center; }.email-align-right { text-align:right; }.email-align-justify { text-align:justify; }

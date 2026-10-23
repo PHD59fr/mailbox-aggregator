@@ -1,0 +1,199 @@
+/* Shared layout, with restrained surfaces and one accent per palette. */
+:root {
+  color-scheme: dark;
+  --app-bg: #14171c; --panel: #1c2026; --raised: #242930; --input: #171b20;
+  --ink: #e6e9ed; --text: #e6e9ed; --muted: #a1a8b2; --line: #343b44; --line-strong: #515c69;
+  --accent: #9cc8cd; --action: #3b747c; --action-hover: #47858e; --action-ink: #fff; --selected: #293c42;
+  --error: #f5a6b2; --danger-bg: #39262d; --success: #a7d8c3; --success-bg: #20322c; --warning: #edd09a; --warning-bg: #352f24;
+  --surface: var(--panel); --surface-soft: var(--panel); --paper: var(--panel); --green: var(--success); --panel-shadow: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--app-bg); color: var(--ink);
+}
+:root[data-theme="paper"] {
+  color-scheme: light;
+  --app-bg: #f3f2ee; --panel: #fff; --raised: #efefeb; --input: #f8f8f5;
+  --ink: #252b32; --text: #252b32; --muted: #636d78; --line: #d6d9d6; --line-strong: #a5afb5;
+  --accent: #246872; --action: #286f78; --action-hover: #205d65; --action-ink: #fff; --selected: #e2eff0;
+  --error: #ae2942; --danger-bg: #faecef; --success: #296b4f; --success-bg: #e7f3ed; --warning: #765318; --warning-bg: #fff2d9;
+}
+:root[data-theme="groove"] {
+  --app-bg: #101010; --panel: #191919; --raised: #262626; --input: #131313;
+  --ink: #f0f0f0; --text: #f0f0f0; --muted: #ababab; --line: #353535; --line-strong: #5a5a5a;
+  --accent: #1ed760; --action: #1db954; --action-hover: #27d363; --action-ink: #07190d; --selected: #193b25;
+}
+:root[data-theme="cinema"] {
+  --app-bg: #0d0d0f; --panel: #19191c; --raised: #27272b; --input: #121215;
+  --ink: #f2f2f3; --text: #f2f2f3; --muted: #b0adb4; --line: #38363d; --line-strong: #625d68;
+  --accent: #ff7b80; --action: #c91823; --action-hover: #e52630; --action-ink: #fff; --selected: #402228;
+}
+body { background: var(--app-bg); color: var(--ink); }
+h1,h2,h3 { letter-spacing: -.018em; }
+h1 { font-weight: 620; }
+label,.check { color: var(--ink); }
+input,select,textarea { color: var(--ink); background: var(--input); border-color: var(--line); box-shadow: none; border-radius: 9px; }
+input::placeholder,textarea::placeholder { color: var(--muted); }
+input:hover,select:hover,textarea:hover { border-color: var(--line-strong); }
+input:focus,select:focus,textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb,var(--accent) 15%,transparent); }
+input[type="checkbox"] { accent-color: var(--action); }
+:focus-visible { outline-color: var(--accent); }
+.primary,.brand-symbol,.rail-link.router-link-active { color: var(--action-ink); background: var(--action); border-color: transparent; box-shadow: none; }
+.primary:hover:not(:disabled),.rail-link.router-link-active:hover { background: var(--action-hover); box-shadow: none; }
+.primary,.secondary,.danger-button { border-radius: 9px; }
+.secondary,.icon-button,.rail-link { color: var(--ink); background: var(--raised); border-color: var(--line); box-shadow: none; }
+.secondary:hover:not(:disabled),.rail-link:hover { background: var(--selected); border-color: var(--line-strong); color: var(--ink); }
+.text-button,.compose-attach,.reader-attachments small,.breadcrumb,.vault-status { color: var(--muted); }
+.danger-button,.error,.mailbox-statuses span.error,.identity-remove { color: var(--error); }
+.connection-success { color:var(--success); }
+.send-success { color:var(--success);background:var(--success-bg);border-color:var(--line); }
+.error-banner { color:var(--error);background:var(--danger-bg);border-color:var(--line); }
+.danger-button { background: var(--danger-bg); border-color: var(--line); }
+.danger-button:hover:not(:disabled) { background: var(--danger-bg); border-color: var(--error); }
+.app-shell { background: var(--app-bg); }
+.app-sidebar,.app-header,.accounts,.message-list,.reader,.compose-sheet,.settings-content section,.modal,.smtp-modal,.lock-card,.source-dialog,.auth-copy { background: var(--panel); border-color: var(--line); box-shadow: none; }
+.app-sidebar { border-radius: 16px; }
+.app-header { min-height: 72px; border-radius: 14px; margin-bottom: 20px; }
+.accounts,.message-list,.reader,.compose-sheet,.settings-content section { border-radius: 14px; }
+.brand,.breadcrumb strong,.message-row-subject,.message-row-top strong,.message-heading dd,.auth-benefits strong { color: var(--ink); }
+.brand > span,.message-heading dt,.message-account,.message-row time { color: var(--muted); }
+.brand-symbol { border-radius: 11px; }
+.rail-link,.rail-status { border-radius: 10px; }
+.rail-status { background: var(--success-bg); color: var(--success); border-color: var(--line); }
+.vault-status.is-unlocked { color: var(--success); }
+.vault-status.is-unlocked > span { background: var(--success); box-shadow: none; }
+.search,.mail-search .search { background: var(--input); color: var(--muted); border-color: var(--line); border-radius: 9px; }
+.search:focus-within { border-color: var(--accent); box-shadow: none; }
+.search-filter.active,.folder.active { background: var(--selected); color: var(--accent); border-color: var(--line); box-shadow: none; }
+.workspace-heading { margin-bottom: 18px; }
+.workspace-heading h1 { font-size: 1.65rem; margin-bottom: 5px; }
+.workspace-heading p { font-size: .76rem; }
+.mail-loading { position:fixed;z-index:900;top:max(18px,env(safe-area-inset-top));right:max(16px,env(safe-area-inset-right));width:min(440px,calc(100% - 32px));display:flex;align-items:center;gap:12px;padding:13px 16px;color:var(--accent);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 36px #02061066; }
+.mail-loading > .app-icon { flex-shrink:0; }
+.mail-loading h2 { margin:0 0 3px;font-size:.86rem;letter-spacing:0; }
+.mail-loading p { margin:0;color:var(--muted);font-size:.75rem; }
+.message-list-loading { display:flex;align-items:center;gap:9px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--raised);color:var(--muted);font-size:.78rem; }
+.message-list-loading .app-icon { color:var(--accent);flex-shrink:0; }
+.eyebrow,.section-label { color: var(--muted); text-transform: none; font-size: .73rem; letter-spacing: .015em; }
+.pane-title .eyebrow { text-transform: none; font-size: .68rem; }
+.pane-title { min-height: 70px; padding-top: 14px; padding-bottom: 14px; }
+.mail-grid { min-height: calc(100dvh - 210px); }
+.folder,.folder b,.mailbox-choice { color: var(--ink); }
+.folder-children,.pane-title,.reader-toolbar,.message-heading,.inbox-messages li,.compose-row,.compose-toolbar,.format-toolbar,.reader-attachments,.modal header,.smtp-modal > header,.source-dialog header { border-color: var(--line); }
+.mailbox-choice:hover,.mailbox-choice.active,.synced-folders button:hover,.synced-folders button.active { background: var(--selected); border-color: var(--line); color: var(--ink); }
+.inbox-messages { padding:0; }
+.inbox-messages .message-row { gap:6px;padding:15px 20px;color: var(--ink);border:0;border-bottom:1px solid var(--line);border-radius:0; }
+.inbox-messages .message-row.selected { background:var(--selected);box-shadow:inset 3px 0 var(--accent); }
+.message-row:hover,.message-row.selected { background: var(--raised); border-color: var(--line); }
+.message-row.unread { background: color-mix(in srgb,var(--accent) 5%,var(--panel)); }
+.message-row.unread .message-row-subject { color: var(--ink); }
+.message-row.unread .message-row-subject::before { background: var(--accent); }
+.empty-mail { min-height: 280px; }
+.empty-mail .empty-icon,.reader .empty-icon { width: 38px; height: 38px; border: 0; background: transparent; color: var(--muted); box-shadow: none; margin-bottom: 12px; border-radius: 0; }
+.empty-mail h2 { font-size: .98rem; font-weight: 540; }
+.empty-mail p { font-size: .78rem; }
+.mail-filters,.reader-privacy-panel,.editor-colors-panel,.editor-link-panel,.compose-toolbar,.identity-removal,.trash-confirm { background: var(--raised); border-color: var(--line); }
+.mail-filters { display:block; }
+.mail-filters-heading { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px; }
+.mail-filters-heading h2 { margin:0;font-size:.95rem; }
+.mail-filters-heading span { color:var(--muted);font-size:.75rem; }
+.mail-filter-fields { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px; }
+.mail-filter-fields label { min-width:0;max-width:none; }
+.mail-filter-footer { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:14px; }
+.mail-filter-footer p,.mail-filter-footer .text-button { margin:0; }
+.search-filter { position:relative; }
+.filter-count { position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;display:grid;place-items:center;border-radius:9px;font-size:.63rem;background:var(--action);color:var(--action-ink); }
+.reader-privacy-panel p,.reader-warning,.redirect-explanation { color: var(--muted); }
+.reader-view-toggle button { color: var(--muted); background: transparent; border-color: var(--line); }
+.reader-view-toggle button.active { color: var(--accent); background: var(--selected); }
+.reader-attachments button,.compose-attachments li,.account-list li { background: var(--input); color: var(--ink); border-color: var(--line); box-shadow: none; }
+.reader-attachments button:hover { background: var(--raised); border-color: var(--line-strong); }
+.message-plaintext,.message-source { background: var(--input); color: var(--ink); border-color: var(--line); }
+.sender-trust[aria-pressed="true"],.domain-trust[aria-pressed="true"] { color: var(--success); }
+.mail-notice { background: var(--success-bg); color: var(--success); border-color: var(--line-strong); box-shadow: 0 8px 26px #0003; }
+.mail-notice.notice-warning { background: var(--warning-bg); color: var(--warning); }
+.settings-section-icon,.auth-form-icon,.lock-mark { color: var(--accent); background: var(--raised); border-color: var(--line); box-shadow: none; border-radius: 12px; }
+.settings-content .danger { background: var(--panel); border-color: var(--line); }
+.danger h2 { color: var(--ink); }
+.account-list span,.auth-copy > p,.auth-card .quiet,.auth-switch,.auth-copy .auth-footer { color: var(--muted); }
+.account-list a,.compose-link,.identity-edit,.auth-switch a,.auth-copy h1 span,.auth-benefits .app-icon,.add-link { color: var(--accent); }
+.identity-edit:hover:not(:disabled),.compose-attach:hover { background: var(--raised); color: var(--accent); border-color: var(--line); }
+.compose-row input,.compose-row select { background: transparent; }
+.compose-row select option { background: var(--panel); color: var(--ink); }
+.compose-row label,.recipient-toggle,.format-toolbar button { color: var(--muted); }
+.recipient-toggle:hover,.format-toolbar button:hover:not(:disabled) { background: var(--raised); }
+.format-toolbar button[aria-pressed="true"] { background: var(--selected); border-color: var(--line); color: var(--accent); }
+.format-divider { background: var(--line); }
+.format-toolbar select { background: var(--input); color: var(--ink); border-color: var(--line); }
+.rich-editor .tiptap:focus { box-shadow: inset 2px 0 var(--accent); }
+.rich-editor .tiptap a { color: var(--accent); }
+.rich-editor .tiptap blockquote { color: var(--muted); border-color: var(--line-strong); }
+.rich-editor .tiptap pre { padding: 14px; background: var(--input); white-space: pre-wrap; border-radius: 6px; }
+.rich-editor .tiptap code { font-family: ui-monospace,monospace; }
+.rich-editor .tiptap table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.rich-editor .tiptap th,.rich-editor .tiptap td { padding: 8px; border: 1px solid var(--line); }
+.rich-editor .tiptap th { background: var(--raised); }
+.rich-editor .tiptap hr { border: 0; border-top: 1px solid var(--line); }
+.modal,.smtp-modal,.lock-card,.source-dialog { border-radius: 16px; }
+.folder-mapping { border-color:var(--line);border-radius:12px; }
+.source-dialog > pre { color: var(--ink); }
+.vault-lock-screen { background: var(--app-bg); }
+.auth-copy { min-height: calc(100dvh - 80px); border-radius: 18px; }
+.auth-copy h1 { font-size: clamp(2.25rem,3.6vw,3.8rem); line-height: 1.12; font-weight: 580; }
+.auth-copy .auth-kicker { color: var(--muted); }
+.auth-copy .brand.large { margin-bottom: 44px; }
+.auth-benefits { gap: 18px; }
+.auth-form-icon { width: 42px; height: 42px; margin-bottom: 22px; }
+.auth-card h2 { font-size: 1.8rem; }
+.login-page { row-gap:16px; }
+.login-page .auth-copy { min-height:calc(100dvh - 116px); }
+.login-footer { grid-column:1 / -1;justify-self:start;align-self:end;font-size:.76rem;color:var(--muted); }
+.login-footer a { display:inline-flex;align-items:center;gap:8px;color:inherit;text-decoration:none; }
+.login-footer a:hover { color:var(--accent);text-decoration:underline; }
+.editor-modes { display:flex; flex-wrap:wrap; gap:4px; padding:12px 22px; border-bottom:1px solid var(--line); }
+.editor-modes button { display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid transparent;border-radius:7px;color:var(--muted);background:transparent;font-size:.76rem; }
+.editor-modes button[aria-pressed="true"] { background:var(--raised);color:var(--ink);border-color:var(--line); }
+.markdown-workspace { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.markdown-source,.markdown-preview { min-width:0;padding:18px; }
+.markdown-source { border-right:1px solid var(--line); }
+.markdown-source textarea { width:100%;min-height:340px;resize:vertical;padding:14px;font:13px/1.75 ui-monospace,monospace;tab-size:2; }
+.markdown-preview iframe,.compose-html-preview iframe { width:100%;height:420px;border:1px solid var(--line);border-radius:8px;background:#fff; }
+.compose-html-preview { padding:18px; }
+.compose-html-preview iframe { height:480px; }
+.markdown-help { margin-top:12px;font-size:.72rem;color:var(--muted); }
+.markdown-help summary { cursor:pointer; }
+.markdown-help pre { white-space:pre-wrap; }
+.markdown-help p { margin-bottom:0; }
+#appearance .refresh-preference { margin-top:14px; }
+@media (max-width:680px) {
+  .mail-filter-fields { grid-template-columns:minmax(0,1fr); }
+  .app-sidebar { background:var(--panel);box-shadow:0 3px 14px #0003;border-radius:14px; }
+  .app-header { min-height:70px; }
+  .mail-grid { min-height:0; }
+  .accounts,.message-list,.compose-sheet,.settings-content section { border-radius:12px; }
+  .auth-copy { min-height:0; padding:24px; }
+  .login-page .auth-copy { min-height:0; }
+  .auth-copy h1 { font-size:2.1rem; }
+  .auth-copy .brand.large { margin-bottom:25px; }
+  .markdown-workspace { grid-template-columns:minmax(0,1fr); }
+  .markdown-source { border-right:0;border-bottom:1px solid var(--line); }
+  .markdown-source textarea { min-height:260px; }
+  .markdown-preview iframe { height:340px; }
+  .editor-modes { padding:10px 12px; }
+  .compose-row:has(#compose-sent-copy) label { flex-basis:58px; }
+}
+
+.import-export-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.import-export-card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px; }
+.import-export-card h3 { margin:0 0 8px; font-size:1rem; }
+.import-export-card .quiet { margin-bottom:16px; font-size:.78rem; }
+.import-export-card .secondary { width:100%; }
+.import-export-modal { margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
+.import-export-modal h4 { margin:0 0 8px; font-size:.88rem; }
+.import-export-modal .quiet { margin-bottom:16px; font-size:.78rem; }
+.import-export-modal label { display:block; margin-bottom:12px; }
+.import-export-modal input { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--ink); font-size:.88rem; }
+.import-export-modal input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-transparent); }
+.import-export-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+.import-export-actions .primary:disabled { opacity:.6; cursor:not-allowed; }
+@media (max-width:680px) {
+  .import-export-grid { grid-template-columns:minmax(0,1fr); }
+}

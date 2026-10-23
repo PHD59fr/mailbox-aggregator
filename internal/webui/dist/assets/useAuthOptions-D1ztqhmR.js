@@ -1,0 +1,1 @@
+import{a as e}from"./index-DbosBX6X.js";import{r as o}from"./auth-DpWV6IeP.js";import{o as s,r}from"./framework-Bc2JQqoe.js";function f(){const a=r(!1),t=r(!1);return s(async()=>{if(!o())try{a.value=(await e("/auth/options")).registration_enabled===!0}catch{a.value=!1}finally{t.value=!0}}),{registrationEnabled:a,optionsLoaded:t}}export{f as u};
